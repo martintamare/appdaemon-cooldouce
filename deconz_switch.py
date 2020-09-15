@@ -68,10 +68,7 @@ LONG_PRESS_STOP = 3
 class DeconzSwitch(hass.Hass):
 
     def initialize(self):
-        self.LOGLEVEL = 'DEBUG'
-
         # Args parsing
-        self.log_name = self.args.get('log', None)
         self.id = self.args['id']
         self.delay_for_modes = self.args.get('delay_for_modes', 1500)
         self.buttons_actions = self.args.get('buttons_actions', [])
