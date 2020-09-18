@@ -1,6 +1,9 @@
 import time
 
-current_time = lambda: int(round(time.time() * 1000))
+
+def current_time():
+    return int(round(time.time() * 1000))
+
 
 class SwitchButton():
     def __init__(self, delay, log):
@@ -31,4 +34,3 @@ class SwitchButton():
 
     def long_press(self):
         self.log('long_press', level='DEBUG')
-

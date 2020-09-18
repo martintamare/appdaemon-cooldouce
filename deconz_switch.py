@@ -1,6 +1,4 @@
 import appdaemon.plugins.hass.hassapi as hass
-import logging
-import pprint
 
 from myutils import SwitchButton
 
@@ -30,7 +28,7 @@ from myutils import SwitchButton
 #    - service: light/turn_on
 #      args:
 #        color_name: yellow
-#    
+#
 #  button_off_short_press_actions:
 #    - service: light/turn_off
 #    - service: light/turn_off
@@ -112,22 +110,33 @@ class DeconzSwitch(hass.Hass):
         service = None
         args = None
 
-        if button_index + 1 > len(self.buttons_actions):
-            self.log('I got nothing to do :/')
+        if button_index not in self.buttons_actions:
+            self.log(f'No action for button {button_index}')
             return
-        actions = self.buttons_actions[button_index]
 
-        action = None
+        state_actions = self.buttons_actions[button_index]
+
+        actions = None
         if code == SHORT_PRESS_STOP:
-            if 'short_press' not in actions:
+            if 'short_press' not in state_actions:
                 self.log(f'Button {button_index} has nothing to do in short_press')
                 return
-            action = actions['short_press']
+            actions = state_actions['short_press']
         elif code == LONG_PRESS_START:
-            if 'long_press' not in actions:
+            if 'long_press' not in state_actions:
                 self.log(f'Button {button_index} has nothing to do in long_Press')
                 return
-            action = actions['long_press']
+            actions = state_actions['long_press']
+
+        number_of_actions = len(actions)
+        state = self.button[button_index].state
+        action_index = (state % number_of_actions) - 1
+        # Last action is mode 0 so -1 = -1
+        if action_index < 0:
+            action_index = number_of_actions - 1
+
+        action = actions[action_index]
+        self.log(f'button{button_index} actions:{number_of_actions} state:{state} action_index:{action_index}')
 
         if action is None:
             return
@@ -135,10 +144,32 @@ class DeconzSwitch(hass.Hass):
         if 'service' not in action:
             self.warning('weird stuff no service')
             return
+
         service = action['service']
         args = action['args']
+        service_args = args.copy()
 
-        self.log(f'triggering service {service} with args {args}')
-        self.call_service(service, **args)
+        if service == 'light/turn_on':
+            self.log('extra check')
+            if 'brightness_step' in service_args:
+                self.log('extra check2')
+                entity_id = service_args['entity_id']
+                brightness_step = service_args['brightness_step']
+                if service_args['brightness_step'] < 0:
+                    self.log('extra check3')
+                    actual_brightness = self.get_state(entity_id, 'brightness')
+                    if actual_brightness is None:
+                        actual_brightness = 0
+                    self.log(f'brightness for {entity_id} is {actual_brightness}')
+                    new_brightness = actual_brightness + brightness_step
+                    if new_brightness < 0:
+                        new_brightness = 1
+                    elif new_brightness > 255:
+                        new_brightness = 255
+                    del service_args['brightness_step']
+                    service_args['brightness'] = new_brightness
+
+        self.log(f'triggering service {service} with args {service_args}')
+        self.call_service(service, **service_args)
 
         return

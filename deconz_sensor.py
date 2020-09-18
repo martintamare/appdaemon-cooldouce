@@ -1,21 +1,25 @@
 import appdaemon.plugins.hass.hassapi as hass
 import datetime
 
+
 class DeconzSensor(hass.Hass):
     """Hacs class."""
 
     def initialize(self):
         """Initialize the HACS app."""
         self.id = self.args['id']
-        self.default_actions = self.args.get('default_actions', {'on': None, 'off': None})
-        self.intervals = []
+        self.log(f'Hello for DeconzSensor {self.id}')
 
+        self.default_actions = self.args.get('default_actions', {'on': None, 'off': None})
+
+        # Build intervals based actions
         actions = self.args.get('actions', [])
+        self.intervals = []
         for action in actions:
             key_to_check = ['start', 'end']
             for key in key_to_check:
                 if key not in action:
-                    self.log(f'You have have key {key} in your config', level='WARNING')
+                    self.log(f'You should have key {key} in your action config {action}', level='WARNING')
                     return
 
             start = action['start']
@@ -31,7 +35,6 @@ class DeconzSensor(hass.Hass):
 
             start_time = datetime.time(start_hour, start_minute, start_second)
             end_time = datetime.time(end_hour, end_minute, end_second)
-
 
             is_overlapping = False
             for interval in self.intervals:
@@ -55,13 +58,16 @@ class DeconzSensor(hass.Hass):
                 self.log('Skipping this interval because overlapping')
                 continue
 
-            self.intervals.append({
+            new_interval = {
                 'start': start_time,
                 'end': end_time,
-                'on': action.get('on', False),
-                'off': action.get('off', False),
-            })
-        self.log(f'Hello for DeconzSensor {self.id}')
+            }
+            if 'on' in action:
+                new_interval['on'] = action['on']
+            if 'off' in action:
+                new_interval['off'] = action['off']
+            self.intervals.append(new_interval)
+
         self.listen_state(self.motion, self.id)
 
     def motion(self, entity, attribute, old, new, kwargs):
@@ -73,13 +79,16 @@ class DeconzSensor(hass.Hass):
                 wanted_interval = interval
                 break
 
-        if wanted_interval is None:
+        if not wanted_interval:
+            self.log(f'No interval for {now}, going default')
+            wanted_interval = self.default_actions
+        elif new not in wanted_interval:
+            self.log(f'No "{new}" action in wanted_interval {wanted_interval}, going default')
             wanted_interval = self.default_actions
 
         if new not in wanted_interval:
-            self.log(f'No {new} in wanted_interval {wanted_interval}')
+            self.log(f'No actions associated with state {new}')
             return
-
 
         action = wanted_interval.get(new)
         service = action.get('service', None)
@@ -91,4 +100,3 @@ class DeconzSensor(hass.Hass):
         self.log(f'triggering service {service} with args {args}')
         self.call_service(service, **args)
         return
-
